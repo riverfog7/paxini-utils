@@ -29,6 +29,7 @@ from paxini_utils.high_speed_board.parsing import (
     parse_sensor_reading,
     parse_total_force,
 )
+from paxini_utils.high_speed_board.transport import SerialTransport
 
 __all__ = [
     "AutoPushFrame",
@@ -43,6 +44,7 @@ __all__ = [
     "ProtocolError",
     "ResponseFrame",
     "SensorReading",
+    "SerialTransport",
     "TransportError",
     "parse_auto_push_frame",
     "parse_auto_push_readings",
