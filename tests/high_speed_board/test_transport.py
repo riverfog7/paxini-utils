@@ -25,15 +25,21 @@ class FakeSerial:
         self.write_error = write_error
         self.close_error = close_error
         self.writes: list[bytes] = []
+        self.read_sizes: list[int] = []
         self.timeout = kwargs.get("timeout")
         self.is_open = True
 
     def read(self, size: int) -> bytes:
+        self.read_sizes.append(size)
         if self.read_error is not None:
             raise self.read_error
         if not self.read_chunks:
             return b""
-        return self.read_chunks.pop(0)
+        chunk = self.read_chunks.pop(0)
+        if len(chunk) > size:
+            self.read_chunks.insert(0, chunk[size:])
+            return chunk[:size]
+        return chunk
 
     def write(self, frame: bytes) -> int:
         if self.write_error is not None:
@@ -88,6 +94,13 @@ def test_open_and_close_use_serial_settings(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert not transport.is_open
     assert not fake.is_open
+
+
+def test_transport_patches_missing_pyserial_namespace_exports() -> None:
+    assert transport_module._serial_namespace.STOPBITS_ONE == 1
+    assert transport_module._serial_namespace.STOPBITS_TWO == 2
+    assert transport_module._serial_namespace.PARITY_NONE == "N"
+    assert issubclass(transport_module._serial_namespace.SerialException, OSError)
 
 
 def test_context_manager_opens_and_closes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,6 +158,18 @@ def test_read_response_parses_valid_response(monkeypatch: pytest.MonkeyPatch) ->
 
     assert frame.register_address == 0x1234
     assert frame.data == b"AB"
+
+
+def test_read_response_uses_frame_aware_read_sizes(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeSerial(read_chunks=[response_frame(b"AB")])
+    install_fake_serial(monkeypatch, fake)
+    transport = SerialTransport("/dev/ttyUSB0")
+    transport.open()
+
+    transport.read_response()
+
+    assert fake.read_sizes == [2, 6, 3]
+    assert 256 not in fake.read_sizes
 
 
 def test_read_auto_push_parses_valid_auto_push(monkeypatch: pytest.MonkeyPatch) -> None:

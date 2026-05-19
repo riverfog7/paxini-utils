@@ -5,7 +5,19 @@ from __future__ import annotations
 import time
 from types import TracebackType
 
+import serial as _serial_namespace
 from serial.serialposix import Serial
+from serial.serialutil import (
+    PARITY_EVEN,
+    PARITY_MARK,
+    PARITY_NONE,
+    PARITY_ODD,
+    PARITY_SPACE,
+    STOPBITS_ONE,
+    STOPBITS_ONE_POINT_FIVE,
+    STOPBITS_TWO,
+    SerialException,
+)
 
 from paxini_utils.high_speed_board.constants import (
     AUTO_PUSH_DATA_OFFSET,
@@ -30,6 +42,26 @@ from paxini_utils.high_speed_board.constants import (
 from paxini_utils.high_speed_board.errors import FrameTimeoutError, ProtocolError, TransportError
 from paxini_utils.high_speed_board.frames import parse_auto_push_frame, parse_response_frame
 from paxini_utils.high_speed_board.models import AutoPushFrame, ResponseFrame
+
+
+def _ensure_pyserial_namespace() -> None:
+    """Patch pyserial's namespace package for Python versions missing __init__.py exports."""
+    for name, value in {
+        "PARITY_EVEN": PARITY_EVEN,
+        "PARITY_MARK": PARITY_MARK,
+        "PARITY_NONE": PARITY_NONE,
+        "PARITY_ODD": PARITY_ODD,
+        "PARITY_SPACE": PARITY_SPACE,
+        "STOPBITS_ONE": STOPBITS_ONE,
+        "STOPBITS_ONE_POINT_FIVE": STOPBITS_ONE_POINT_FIVE,
+        "STOPBITS_TWO": STOPBITS_TWO,
+        "SerialException": SerialException,
+    }.items():
+        if not hasattr(_serial_namespace, name):
+            setattr(_serial_namespace, name, value)
+
+
+_ensure_pyserial_namespace()
 
 
 class SerialTransport:
@@ -147,12 +179,30 @@ class SerialTransport:
 
             try:
                 connection.timeout = min(self.timeout, remaining)
-                chunk = connection.read(SERIAL_READ_CHUNK_SIZE)
+                chunk = connection.read(self._next_read_size())
             except Exception as exc:
                 raise TransportError(f"Failed to read serial frame: {exc}") from exc
 
             if chunk:
                 self._buffer.extend(chunk)
+
+    def _next_read_size(self) -> int:
+        header_index = self._find_next_header()
+        if header_index is None:
+            return MIN_HEADER_SEARCH_LENGTH - len(self._buffer) if len(self._buffer) < MIN_HEADER_SEARCH_LENGTH else 1
+
+        if header_index > 0:
+            return 1
+
+        expected_length = self._expected_frame_length()
+        if expected_length is not None:
+            return max(1, min(expected_length - len(self._buffer), SERIAL_READ_CHUNK_SIZE))
+
+        if self._buffer.startswith(RESPONSE_HEADER):
+            return RESPONSE_DATA_OFFSET - len(self._buffer)
+        if self._buffer.startswith(AUTO_PUSH_HEADER):
+            return AUTO_PUSH_ERROR_CODE_OFFSET - len(self._buffer)
+        return 1
 
     def _try_extract_frame(self) -> bytes | None:
         header_index = self._find_next_header()
