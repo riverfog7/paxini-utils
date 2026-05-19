@@ -1,9 +1,11 @@
 """High-level synchronous client for the high speed communication board."""
 
+import time
 from collections.abc import Iterable, Iterator, Mapping
 from typing import Literal
 
 from paxini_utils.high_speed_board.constants import (
+    AUTO_PUSH_DISABLE_DRAIN_DELAY,
     AUTO_PUSH_REGISTER,
     BYTEORDER,
     DEFAULT_BAUDRATE,
@@ -84,6 +86,7 @@ class HighSpeedBoard:
 
     def read_register(self, register: int, length: int) -> bytes:
         """Read raw bytes from a board register."""
+        self._prepare_command()
         self.transport.write(build_read_request(register, length))
         response = self.transport.read_response()
         self._validate_response_register(response, register)
@@ -91,6 +94,7 @@ class HighSpeedBoard:
 
     def write_register(self, register: int, data: bytes) -> ResponseFrame:
         """Write raw bytes to a board register and return the response frame."""
+        self._prepare_command()
         self.transport.write(build_write_request(register, data))
         response = self.transport.read_response()
         self._validate_response_register(response, register)
@@ -102,6 +106,7 @@ class HighSpeedBoard:
         expected: ExpectedFrame = "response",
     ) -> ResponseFrame | AutoPushFrame | None:
         """Send a prebuilt frame and optionally read the expected response type."""
+        self._prepare_command()
         self.transport.write(frame)
         if expected is None:
             return None
@@ -124,7 +129,12 @@ class HighSpeedBoard:
 
     def disable_auto_push(self, timeout: float | None = None) -> ResponseFrame | None:
         """Disable automatic push frames, tolerating no response like the reference implementation."""
+        self._prepare_command()
         self.transport.write(build_write_request(AUTO_PUSH_REGISTER, b"\x00"))
+        if timeout == 0:
+            time.sleep(AUTO_PUSH_DISABLE_DRAIN_DELAY)
+            self.transport.reset_input_buffer()
+            return None
         try:
             response = self.transport.read_response(timeout)
         except FrameTimeoutError:
@@ -141,6 +151,7 @@ class HighSpeedBoard:
 
     def reset(self, timeout: float | None = None) -> ResponseFrame | None:
         """Request a board reset, tolerating no response after the command is written."""
+        self._prepare_command()
         self.transport.write(build_write_request(SYSTEM_RESET_REGISTER, b"\x01"))
         try:
             response = self.transport.read_response(timeout)
@@ -248,10 +259,13 @@ class HighSpeedBoard:
         connected_sensors: tuple[str, ...] | None = None,
         point_counts: Mapping[str, int] | None = None,
         update_state: bool = True,
+        fresh: bool = True,
     ) -> tuple[SensorReading, ...]:
         """Read and parse one auto-push payload into sensor readings."""
         selected_sensors = connected_sensors or self._get_or_refresh_connected_sensors()
         selected_counts = dict(point_counts or self._ensure_point_counts(selected_sensors))
+        if fresh:
+            self.transport.reset_input_buffer()
         frame = self.read_auto_push_frame(timeout)
         return self._parse_auto_push_frame_readings(
             frame,
@@ -269,10 +283,11 @@ class HighSpeedBoard:
         self,
         timeout: float | None = None,
         update_state: bool = True,
+        fresh: bool = False,
     ) -> Iterator[tuple[SensorReading, ...]]:
         """Yield parsed auto-push readings forever until transport/parsing raises."""
         while True:
-            yield self.read_auto_push_readings(timeout, update_state=update_state)
+            yield self.read_auto_push_readings(timeout, update_state=update_state, fresh=fresh)
 
     def start_streaming(
         self,
@@ -349,6 +364,9 @@ class HighSpeedBoard:
         if update_state:
             self.state.update_readings(readings)
         return readings
+
+    def _prepare_command(self) -> None:
+        self.transport.reset_input_buffer()
 
     @staticmethod
     def _validate_response_register(response: ResponseFrame, register: int) -> None:

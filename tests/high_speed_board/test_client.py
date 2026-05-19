@@ -1,5 +1,6 @@
 import pytest
 
+import paxini_utils.high_speed_board.client as client_module
 from paxini_utils.high_speed_board.client import HighSpeedBoard
 from paxini_utils.high_speed_board.constants import (
     AUTO_PUSH_REGISTER,
@@ -21,12 +22,18 @@ from paxini_utils.high_speed_board.sensors import get_distribution_range, get_po
 
 
 class FakeTransport:
-    def __init__(self, frames: list[ResponseFrame | AutoPushFrame | Exception] | None = None) -> None:
+    def __init__(
+        self,
+        frames: list[ResponseFrame | AutoPushFrame | Exception] | None = None,
+        frames_after_write: list[ResponseFrame | AutoPushFrame | Exception] | None = None,
+    ) -> None:
         self.frames = frames or []
+        self.frames_after_write = frames_after_write or []
         self.writes: list[bytes] = []
         self.is_open = False
         self.open_calls = 0
         self.close_calls = 0
+        self.reset_input_buffer_calls = 0
 
     def open(self) -> None:
         self.open_calls += 1
@@ -36,8 +43,13 @@ class FakeTransport:
         self.close_calls += 1
         self.is_open = False
 
+    def reset_input_buffer(self) -> None:
+        self.reset_input_buffer_calls += 1
+
     def write(self, frame: bytes) -> None:
         self.writes.append(frame)
+        if self.frames_after_write:
+            self.frames.append(self.frames_after_write.pop(0))
 
     def read_response(self, timeout: float | None = None) -> ResponseFrame:
         frame = self._pop_frame()
@@ -116,6 +128,25 @@ def test_read_register_writes_request_and_returns_data() -> None:
 
     assert data == b"AB"
     assert fake.writes == [build_read_request(0x1234, 2)]
+    assert fake.reset_input_buffer_calls == 1
+
+
+def test_read_register_flushes_stale_frames_before_writing() -> None:
+    fake = FakeTransport(
+        [auto_push(b"stale"), response(AUTO_PUSH_REGISTER)],
+        frames_after_write=[response(0x0010, b"\x01")],
+    )
+
+    def clear_stale_frames() -> None:
+        fake.reset_input_buffer_calls += 1
+        fake.frames.clear()
+
+    fake.reset_input_buffer = clear_stale_frames  # type: ignore[method-assign]
+    board = board_with(fake)
+
+    assert board.read_register(0x0010, 1) == b"\x01"
+    assert fake.writes == [build_read_request(0x0010, 1)]
+    assert fake.reset_input_buffer_calls == 1
 
 
 def test_read_register_rejects_response_register_mismatch() -> None:
@@ -134,6 +165,7 @@ def test_write_register_writes_request_and_returns_response() -> None:
 
     assert frame.register_address == AUTO_PUSH_REGISTER
     assert fake.writes == [build_write_request(AUTO_PUSH_REGISTER, b"\x01")]
+    assert fake.reset_input_buffer_calls == 1
 
 
 def test_send_raw_frame_supports_response_auto_frame_and_no_read() -> None:
@@ -148,6 +180,7 @@ def test_send_raw_frame_supports_response_auto_frame_and_no_read() -> None:
     assert board.send_raw_frame(b"c", expected="frame") == any_frame
     assert board.send_raw_frame(b"d", expected=None) is None
     assert fake.writes == [b"a", b"b", b"c", b"d"]
+    assert fake.reset_input_buffer_calls == 4
 
 
 def test_get_version_decodes_null_padded_ascii() -> None:
@@ -176,6 +209,23 @@ def test_disable_auto_push_tolerates_timeout_after_write() -> None:
 
     assert board.disable_auto_push(timeout=0.01) is None
     assert fake.writes == [build_write_request(AUTO_PUSH_REGISTER, b"\x00")]
+
+
+def test_disable_auto_push_can_skip_response_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(client_module.time, "sleep", lambda delay: None)
+    fake = FakeTransport([auto_push(b"stale")])
+
+    def clear_stale_frames() -> None:
+        fake.reset_input_buffer_calls += 1
+        fake.frames.clear()
+
+    fake.reset_input_buffer = clear_stale_frames  # type: ignore[method-assign]
+    board = board_with(fake)
+
+    assert board.disable_auto_push(timeout=0) is None
+    assert fake.writes == [build_write_request(AUTO_PUSH_REGISTER, b"\x00")]
+    assert fake.reset_input_buffer_calls == 2
+    assert fake.frames == []
 
 
 def test_calibrate_sends_default_or_custom_frame() -> None:
@@ -313,7 +363,7 @@ def test_read_auto_push_readings_refreshes_missing_metadata() -> None:
     )
     board = board_with(fake)
 
-    readings = board.read_auto_push_readings()
+    readings = board.read_auto_push_readings(fresh=False)
 
     assert len(readings) == 1
     assert readings[0].sensor == THUMB_NEAR
@@ -330,6 +380,7 @@ def test_read_auto_push_readings_accepts_explicit_metadata() -> None:
     readings = board.read_auto_push_readings(
         connected_sensors=(THUMB_NEAR,),
         point_counts={THUMB_NEAR: 1},
+        fresh=False,
     )
 
     assert readings[0].sensor == THUMB_NEAR
@@ -346,6 +397,7 @@ def test_read_auto_push_readings_can_skip_state_update() -> None:
         connected_sensors=(THUMB_NEAR,),
         point_counts={THUMB_NEAR: 0},
         update_state=False,
+        fresh=False,
     )
 
     assert board.state.get_sensor(THUMB_NEAR) is None
@@ -359,9 +411,29 @@ def test_read_auto_push_readings_applies_palm_point_limit() -> None:
     readings = board.read_auto_push_readings(
         connected_sensors=(PALM_8,),
         point_counts={PALM_8: 10},
+        fresh=False,
     )
 
     assert len(readings[0].distribution) == 9
+
+
+def test_read_auto_push_readings_flushes_by_default() -> None:
+    payload = b"\x01\x00\x02\x00\x03\x00"
+    fake = FakeTransport([auto_push(payload)])
+
+    def keep_new_frame_after_reset() -> None:
+        fake.reset_input_buffer_calls += 1
+
+    fake.reset_input_buffer = keep_new_frame_after_reset  # type: ignore[method-assign]
+    board = board_with(fake)
+
+    readings = board.read_auto_push_readings(
+        connected_sensors=(THUMB_NEAR,),
+        point_counts={THUMB_NEAR: 0},
+    )
+
+    assert readings[0].sensor == THUMB_NEAR
+    assert fake.reset_input_buffer_calls == 1
 
 
 def test_iter_auto_push_frames_yields_frames() -> None:

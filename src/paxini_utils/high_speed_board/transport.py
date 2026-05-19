@@ -141,6 +141,18 @@ class SerialTransport:
         if written != len(frame):
             raise TransportError(f"Incomplete serial write: expected {len(frame)} bytes, wrote {written}")
 
+    def reset_input_buffer(self) -> None:
+        """Clear pending bytes from the transport and underlying serial input buffer."""
+        connection = self._require_open()
+        self._buffer.clear()
+        try:
+            if hasattr(connection, "reset_input_buffer"):
+                connection.reset_input_buffer()
+            elif hasattr(connection, "flushInput"):
+                connection.flushInput()
+        except Exception as exc:
+            raise TransportError(f"Failed to reset serial input buffer: {exc}") from exc
+
     def read_frame(self, timeout: float | None = None) -> ResponseFrame | AutoPushFrame:
         """Read and parse the next response or auto-push frame."""
         frame = self._read_until_frame(self.timeout if timeout is None else timeout)

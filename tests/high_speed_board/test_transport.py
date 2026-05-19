@@ -26,6 +26,8 @@ class FakeSerial:
         self.close_error = close_error
         self.writes: list[bytes] = []
         self.read_sizes: list[int] = []
+        self.reset_input_buffer_calls = 0
+        self.flush_input_calls = 0
         self.timeout = kwargs.get("timeout")
         self.is_open = True
 
@@ -51,6 +53,14 @@ class FakeSerial:
         if self.close_error is not None:
             raise self.close_error
         self.is_open = False
+
+    def reset_input_buffer(self) -> None:
+        self.reset_input_buffer_calls += 1
+        self.read_chunks.clear()
+
+    def flushInput(self) -> None:
+        self.flush_input_calls += 1
+        self.read_chunks.clear()
 
 
 def with_lrc(frame_body: bytes) -> bytes:
@@ -216,6 +226,22 @@ def test_read_frame_preserves_remaining_buffer(monkeypatch: pytest.MonkeyPatch) 
 
     assert transport.read_response().data == b"1"
     assert transport.read_response().data == b"2"
+
+
+def test_reset_input_buffer_clears_serial_and_internal_buffers(monkeypatch: pytest.MonkeyPatch) -> None:
+    first = response_frame(b"1")
+    second = response_frame(b"2")
+    fake = FakeSerial(read_chunks=[first + second])
+    install_fake_serial(monkeypatch, fake)
+    transport = SerialTransport("/dev/ttyUSB0")
+    transport.open()
+
+    assert transport.read_response().data == b"1"
+    transport.reset_input_buffer()
+
+    assert fake.reset_input_buffer_calls == 1
+    with pytest.raises(FrameTimeoutError):
+        transport.read_response(timeout=0.001)
 
 
 def test_read_frame_times_out_on_incomplete_frame(monkeypatch: pytest.MonkeyPatch) -> None:
