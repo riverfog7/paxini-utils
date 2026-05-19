@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from types import TracebackType
 
-import serial
+from serial.serialposix import Serial
 
 from paxini_utils.high_speed_board.constants import (
     AUTO_PUSH_DATA_OFFSET,
@@ -44,7 +44,7 @@ class SerialTransport:
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
-        self._serial: serial.Serial | None = None
+        self._serial: Serial | None = None
         self._buffer = bytearray()
 
     def __enter__(self) -> SerialTransport:
@@ -70,7 +70,7 @@ class SerialTransport:
             return
 
         try:
-            self._serial = serial.Serial(
+            self._serial = Serial(
                 port=self.port,
                 baudrate=self.baudrate,
                 timeout=self.timeout,
@@ -210,7 +210,7 @@ class SerialTransport:
             return
         self._buffer.clear()
 
-    def _require_open(self) -> serial.Serial:
+    def _require_open(self) -> Serial:
         if self._serial is None or not self._serial.is_open:
             raise TransportError("Serial transport is not open")
         return self._serial
