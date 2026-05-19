@@ -8,6 +8,11 @@ from paxini_utils.high_speed_board.errors import (
     ProtocolError,
     TransportError,
 )
+from paxini_utils.high_speed_board.frames import (
+    parse_auto_push_frame,
+    parse_response_frame,
+    validate_lrc,
+)
 from paxini_utils.high_speed_board.models import (
     AutoPushFrame,
     BoardStatus,
@@ -32,4 +37,7 @@ __all__ = [
     "ResponseFrame",
     "SensorReading",
     "TransportError",
+    "parse_auto_push_frame",
+    "parse_response_frame",
+    "validate_lrc",
 ]
