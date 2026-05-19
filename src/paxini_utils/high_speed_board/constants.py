@@ -34,8 +34,205 @@ MODULE_FORCE_LENGTH = MODULE_COUNT * MODULE_FORCE_BYTES
 TOTAL_FORCE_BYTES = 6
 DISTRIBUTION_POINT_BYTES = 3
 PALM_POINT_LIMIT = 9
+PALM_SENSOR_PREFIX = "palm_"
+MIN_POINT_COUNT = 0
+MIN_STATUS_BYTE = 0x00
+MAX_STATUS_BYTE = 0xFF
+STATUS_BIT_MASK_BASE = 0x01
 
 DEFAULT_CALIBRATION_FRAME = bytes.fromhex("55AA00170200010001E6")
 
 KNOWN_VERSION_REQUEST = bytes.fromhex("55AA000300000F00EF")
 KNOWN_ENABLE_AUTO_PUSH_REQUEST = bytes.fromhex("55AA00101700010001D8")
+
+THUMB_NEAR = "thumb_near"
+THUMB_MIDDLE = "thumb_middle"
+THUMB_TIP = "thumb_tip"
+THUMB_NAIL = "thumb_nail"
+INDEX_NEAR = "index_near"
+INDEX_MIDDLE = "index_middle"
+INDEX_TIP = "index_tip"
+INDEX_NAIL = "index_nail"
+MIDDLE_NEAR = "middle_near"
+MIDDLE_MIDDLE = "middle_middle"
+MIDDLE_TIP = "middle_tip"
+MIDDLE_NAIL = "middle_nail"
+RING_NEAR = "ring_near"
+RING_MIDDLE = "ring_middle"
+RING_TIP = "ring_tip"
+RING_NAIL = "ring_nail"
+PINKY_NEAR = "pinky_near"
+PINKY_MIDDLE = "pinky_middle"
+PINKY_TIP = "pinky_tip"
+PINKY_NAIL = "pinky_nail"
+PALM_1 = "palm_1"
+PALM_2 = "palm_2"
+PALM_3 = "palm_3"
+PALM_4 = "palm_4"
+PALM_5 = "palm_5"
+PALM_6 = "palm_6"
+PALM_7 = "palm_7"
+PALM_8 = "palm_8"
+
+SENSOR_ORDER: tuple[str, ...] = (
+    THUMB_NEAR,
+    THUMB_MIDDLE,
+    THUMB_TIP,
+    THUMB_NAIL,
+    INDEX_NEAR,
+    INDEX_MIDDLE,
+    INDEX_TIP,
+    INDEX_NAIL,
+    MIDDLE_NEAR,
+    MIDDLE_MIDDLE,
+    MIDDLE_TIP,
+    MIDDLE_NAIL,
+    RING_NEAR,
+    RING_MIDDLE,
+    RING_TIP,
+    RING_NAIL,
+    PINKY_NEAR,
+    PINKY_MIDDLE,
+    PINKY_TIP,
+    PINKY_NAIL,
+    PALM_1,
+    PALM_2,
+    PALM_3,
+    PALM_4,
+    PALM_5,
+    PALM_6,
+    PALM_7,
+    PALM_8,
+)
+
+SENSOR_DISPLAY_NAMES: dict[str, str] = {
+    THUMB_NEAR: "Thumb near",
+    THUMB_MIDDLE: "Thumb middle",
+    THUMB_TIP: "Thumb tip",
+    THUMB_NAIL: "Thumb nail",
+    INDEX_NEAR: "Index near",
+    INDEX_MIDDLE: "Index middle",
+    INDEX_TIP: "Index tip",
+    INDEX_NAIL: "Index nail",
+    MIDDLE_NEAR: "Middle near",
+    MIDDLE_MIDDLE: "Middle middle",
+    MIDDLE_TIP: "Middle tip",
+    MIDDLE_NAIL: "Middle nail",
+    RING_NEAR: "Ring near",
+    RING_MIDDLE: "Ring middle",
+    RING_TIP: "Ring tip",
+    RING_NAIL: "Ring nail",
+    PINKY_NEAR: "Pinky near",
+    PINKY_MIDDLE: "Pinky middle",
+    PINKY_TIP: "Pinky tip",
+    PINKY_NAIL: "Pinky nail",
+    PALM_1: "Palm 1",
+    PALM_2: "Palm 2",
+    PALM_3: "Palm 3",
+    PALM_4: "Palm 4",
+    PALM_5: "Palm 5",
+    PALM_6: "Palm 6",
+    PALM_7: "Palm 7",
+    PALM_8: "Palm 8",
+}
+
+STATUS_REGISTER_SENSORS: dict[int, tuple[str, ...]] = {
+    0x0010: (
+        THUMB_NEAR,
+        THUMB_MIDDLE,
+        THUMB_TIP,
+        THUMB_NAIL,
+        INDEX_NEAR,
+        INDEX_MIDDLE,
+        INDEX_TIP,
+        INDEX_NAIL,
+    ),
+    0x0011: (
+        MIDDLE_NEAR,
+        MIDDLE_MIDDLE,
+        MIDDLE_TIP,
+        MIDDLE_NAIL,
+        RING_NEAR,
+        RING_MIDDLE,
+        RING_TIP,
+        RING_NAIL,
+    ),
+    0x0012: (
+        PINKY_NEAR,
+        PINKY_MIDDLE,
+        PINKY_TIP,
+        PINKY_NAIL,
+        PALM_1,
+        PALM_2,
+        PALM_3,
+        PALM_4,
+    ),
+    0x0013: (
+        PALM_5,
+        PALM_6,
+        PALM_7,
+        PALM_8,
+    ),
+}
+
+DISTRIBUTION_ADDRESS_RANGES: dict[str, tuple[int, int]] = {
+    THUMB_NEAR: (0x1000, 0x11FF),
+    THUMB_MIDDLE: (0x1200, 0x13FF),
+    THUMB_TIP: (0x1400, 0x15FF),
+    THUMB_NAIL: (0x1600, 0x17FF),
+    INDEX_NEAR: (0x1800, 0x19FF),
+    INDEX_MIDDLE: (0x1A00, 0x1BFF),
+    INDEX_TIP: (0x1C00, 0x1DFF),
+    INDEX_NAIL: (0x1E00, 0x1FFF),
+    MIDDLE_NEAR: (0x2000, 0x21FF),
+    MIDDLE_MIDDLE: (0x2200, 0x23FF),
+    MIDDLE_TIP: (0x2400, 0x25FF),
+    MIDDLE_NAIL: (0x2600, 0x27FF),
+    RING_NEAR: (0x2800, 0x29FF),
+    RING_MIDDLE: (0x2A00, 0x2BFF),
+    RING_TIP: (0x2C00, 0x2DFF),
+    RING_NAIL: (0x2E00, 0x2FFF),
+    PINKY_NEAR: (0x3000, 0x31FF),
+    PINKY_MIDDLE: (0x3200, 0x33FF),
+    PINKY_TIP: (0x3400, 0x35FF),
+    PINKY_NAIL: (0x3600, 0x37FF),
+    PALM_1: (0x3800, 0x38FF),
+    PALM_2: (0x3900, 0x39FF),
+    PALM_3: (0x3A00, 0x3AFF),
+    PALM_4: (0x3B00, 0x3BFF),
+    PALM_5: (0x3C00, 0x3CFF),
+    PALM_6: (0x3D00, 0x3DFF),
+    PALM_7: (0x3E00, 0x3EFF),
+    PALM_8: (0x3F00, 0x3FFF),
+}
+
+POINT_COUNT_REGISTERS: dict[str, int] = {
+    THUMB_NEAR: 0x0030,
+    THUMB_MIDDLE: 0x0032,
+    THUMB_TIP: 0x0034,
+    THUMB_NAIL: 0x0036,
+    INDEX_NEAR: 0x0038,
+    INDEX_MIDDLE: 0x003A,
+    INDEX_TIP: 0x003C,
+    INDEX_NAIL: 0x003E,
+    MIDDLE_NEAR: 0x0040,
+    MIDDLE_MIDDLE: 0x0042,
+    MIDDLE_TIP: 0x0044,
+    MIDDLE_NAIL: 0x0046,
+    RING_NEAR: 0x0048,
+    RING_MIDDLE: 0x004A,
+    RING_TIP: 0x004C,
+    RING_NAIL: 0x004E,
+    PINKY_NEAR: 0x0050,
+    PINKY_MIDDLE: 0x0052,
+    PINKY_TIP: 0x0054,
+    PINKY_NAIL: 0x0056,
+    PALM_1: 0x0066,
+    PALM_2: 0x0068,
+    PALM_3: 0x006A,
+    PALM_4: 0x006C,
+    PALM_5: 0x006E,
+    PALM_6: 0x0070,
+    PALM_7: 0x0072,
+    PALM_8: 0x0074,
+}
