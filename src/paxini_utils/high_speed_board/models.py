@@ -70,3 +70,11 @@ class BoardStatus(BaseModel):
 
     model_config = ConfigDict(frozen=True)
     connected_sensors: tuple[str, ...] = ()
+
+
+class BoardStateSnapshot(BaseModel):
+    """Immutable snapshot of latest cached board values."""
+
+    model_config = ConfigDict(frozen=True)
+    sensor_readings: tuple[SensorReading, ...] = ()
+    module_forces: tuple[ModuleForce, ...] = ()

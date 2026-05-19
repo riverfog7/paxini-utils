@@ -1,5 +1,6 @@
 """High speed communication board support."""
 
+from paxini_utils.high_speed_board.client import HighSpeedBoard
 from paxini_utils.high_speed_board.errors import (
     BoardError,
     ChecksumError,
@@ -16,6 +17,7 @@ from paxini_utils.high_speed_board.frames import (
 from paxini_utils.high_speed_board.models import (
     AutoPushFrame,
     BoardStatus,
+    BoardStateSnapshot,
     DistributionPoint,
     Force3D,
     ModuleForce,
@@ -29,22 +31,28 @@ from paxini_utils.high_speed_board.parsing import (
     parse_sensor_reading,
     parse_total_force,
 )
+from paxini_utils.high_speed_board.state import BoardState
+from paxini_utils.high_speed_board.streaming import StreamingHandle
 from paxini_utils.high_speed_board.transport import SerialTransport
 
 __all__ = [
     "AutoPushFrame",
     "BoardError",
+    "BoardState",
+    "BoardStateSnapshot",
     "BoardStatus",
     "ChecksumError",
     "DeviceError",
     "DistributionPoint",
     "Force3D",
     "FrameTimeoutError",
+    "HighSpeedBoard",
     "ModuleForce",
     "ProtocolError",
     "ResponseFrame",
     "SensorReading",
     "SerialTransport",
+    "StreamingHandle",
     "TransportError",
     "parse_auto_push_frame",
     "parse_auto_push_readings",
